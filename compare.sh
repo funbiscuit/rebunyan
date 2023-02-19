@@ -11,15 +11,19 @@ NODE_BUNYAN_BIN=$(npm config get prefix)/bin/bunyan
 cargo build --release --bin rebunyan
 log_file=target/bench.log
 
-tests=(minimal details)
+tests=(minimal details details)
 # use different number of lines so test takes ~equal time to finish
-log_scales=(16 15)
+log_scales=(16 15 15)
+cli_args=("--no-color" "--no-color" "--color")
+descriptions=("no color" "no color" "colored")
 compare_file="COMPARE.md"
 
 echo "# Compare" >$compare_file
 for ((i = 0; i < ${#tests[@]}; ++i)); do
   test=${tests[$i]}
   log_scale=${log_scales[$i]}
+  cli_arg=${cli_args[$i]}
+  description=${descriptions[$i]}
 
   # generate log file (that will have n0*2^log_scale lines)
   ./generate_log.sh "data/$test.log" "$log_file" "$log_scale"
@@ -30,19 +34,18 @@ for ((i = 0; i < ${#tests[@]}; ++i)); do
 
   echo "==>  $test ($log_size, $lines lines) <=="
 
-  # test without color since it's not yet supported
   hyperfine --warmup 10 -m 50 \
     --export-markdown "target/compare-$test.md" \
     -n rebunyan \
-    "cat $log_file | $REBUNYAN_BIN " \
+    "cat $log_file | $REBUNYAN_BIN $cli_arg " \
     -n bunyan_view \
-    "cat $log_file | $BUNYAN_VIEW_BIN --no-color " \
+    "cat $log_file | $BUNYAN_VIEW_BIN $cli_arg " \
     -n node-bunyan \
-    "cat $log_file | $NODE_BUNYAN_BIN --no-color "
+    "cat $log_file | $NODE_BUNYAN_BIN $cli_arg "
 
   rm $log_file
 
-  echo "## \`$test\` ($log_size, $lines lines)" >>$compare_file
+  echo "## \`$test\` ($description, $log_size, $lines lines)" >>$compare_file
   cat "target/compare-$test.md" >>$compare_file
   rm -f "target/compare-$test.md"
 done

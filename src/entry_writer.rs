@@ -6,6 +6,8 @@ use time::format_description::FormatItem;
 
 use crate::log_entry::LogEntry;
 use crate::log_level::LogLevel;
+use crate::style::Style;
+use crate::styled_writer::StyledWriter;
 
 /// Maximum length of single entry in extras.
 /// Otherwise it will be printed in details section.
@@ -17,7 +19,11 @@ pub struct EntryWriter {
 }
 
 impl EntryWriter {
-    pub fn write_formatted(&self, writer: &mut impl Write, entry: LogEntry) -> io::Result<()> {
+    pub fn write_formatted(
+        &self,
+        writer: &mut StyledWriter<impl Write>,
+        entry: LogEntry,
+    ) -> io::Result<()> {
         let hostname = if entry.hostname.is_empty() {
             "<no-hostname>"
         } else {
@@ -25,18 +31,22 @@ impl EntryWriter {
         };
         // not using write!(..) since it's a bit slower and makes harder to colorize output
         // without extra cost
-        writer.write_all(b"[")?;
-        writer.write_all(entry.time.format(&self.time_formatter).unwrap().as_bytes())?;
-        writer.write_all(b"] ")?;
-        writer.write_all(Self::write_level(entry.level).as_bytes())?;
-        writer.write_all(b": ")?;
-        writer.write_all(entry.name.as_bytes())?;
-        writer.write_all(b"/")?;
-        writer.write_all(entry.pid.to_string().as_bytes())?;
-        writer.write_all(b" on ")?;
-        writer.write_all(hostname.as_bytes())?;
-        writer.write_all(b": ")?;
-        writer.write_all(entry.message.as_bytes())?;
+        writer.write("[")?;
+        writer.write_styled(
+            &entry.time.format(&self.time_formatter).unwrap(),
+            Style::White,
+        )?;
+        writer.write("] ")?;
+        let (level, style) = Self::format_level(entry.level);
+        writer.write_styled(&level, style)?;
+        writer.write(": ")?;
+        writer.write(&entry.name)?;
+        writer.write("/")?;
+        writer.write(&entry.pid.to_string())?;
+        writer.write(" on ")?;
+        writer.write(hostname)?;
+        writer.write(": ")?;
+        writer.write_styled(&entry.message, Style::Cyan)?;
         Self::write_leftover(writer, entry.leftover)?;
         Ok(())
     }
@@ -51,20 +61,20 @@ impl EntryWriter {
         Self { time_formatter }
     }
 
-    fn write_level(level: LogLevel) -> String {
+    fn format_level(level: LogLevel) -> (String, Style) {
         match level {
-            LogLevel::Trace => "TRACE".to_owned(),
-            LogLevel::Debug => "DEBUG".to_owned(),
-            LogLevel::Info => " INFO".to_owned(),
-            LogLevel::Warn => " WARN".to_owned(),
-            LogLevel::Error => "ERROR".to_owned(),
-            LogLevel::Fatal => "FATAL".to_owned(),
-            LogLevel::Custom(level) => format!("LVL{level}"),
+            LogLevel::Trace => ("TRACE".to_owned(), Style::White),
+            LogLevel::Debug => ("DEBUG".to_owned(), Style::Yellow),
+            LogLevel::Info => (" INFO".to_owned(), Style::Cyan),
+            LogLevel::Warn => (" WARN".to_owned(), Style::Magenta),
+            LogLevel::Error => ("ERROR".to_owned(), Style::Red),
+            LogLevel::Fatal => ("FATAL".to_owned(), Style::Inverse),
+            LogLevel::Custom(level) => (format!("LVL{level}"), Style::None),
         }
     }
 
     fn write_leftover(
-        mut writer: impl Write,
+        mut writer: &mut StyledWriter<impl Write>,
         extra_fields: serde_json::Map<String, serde_json::Value>,
     ) -> io::Result<()> {
         // items will be [extras...; details]
@@ -94,31 +104,30 @@ impl EntryWriter {
 
         let (extras, details) = items.make_contiguous().split_at(extras_count);
         if !extras.is_empty() {
-            writer.write_all(b" (")?;
+            writer.write(" (")?;
             // reversing iterator because we pushed items to front
             (&mut writer, extras.iter().rev(), ", ").write_joined(
                 |writer, (key, value, need_quotes)| {
-                    writer.write_all(key.as_bytes())?;
-                    writer.write_all(b"=")?;
+                    writer.write_styled(key, Style::Bold)?;
+                    writer.write("=")?;
                     if *need_quotes {
-                        writer.write_all(b"\"")?;
-                        writer.write_all(value.as_bytes())?;
-                        writer.write_all(b"\"")
+                        writer.write("\"")?;
+                        writer.write(value)?;
+                        writer.write("\"")
                     } else {
-                        writer.write_all(value.as_bytes())
+                        writer.write(value)
                     }
                 },
             )?;
-            writer.write_all(b")")?;
+            writer.write(")")?;
         }
 
-        (&mut writer, details.iter(), "\n    --").write_joined(|writer, (key, value, _)| {
-            writer.write_all(b"\n    ")?;
-            writer.write_all(key.as_bytes())?;
-            writer.write_all(b": ")?;
+        (writer, details.iter(), "\n    --").write_joined(|writer, (key, value, _)| {
+            writer.write("\n    ")?;
+            writer.write_styled(key, Style::Bold)?;
+            writer.write(": ")?;
 
-            (writer, value.lines(), "\n    ")
-                .write_joined(|writer, line| writer.write_all(line.as_bytes()))
+            (writer, value.lines(), "\n    ").write_joined(|writer, line| writer.write(line))
         })?;
         Ok(())
     }
@@ -127,24 +136,28 @@ impl EntryWriter {
 /// Helper trait to write items from iterator
 /// without extra allocations
 trait WriteJoined<W, T> {
-    fn write_joined(self, write_item: impl FnMut(&mut W, T) -> io::Result<()>) -> io::Result<()>;
+    fn write_joined(
+        &mut self,
+        write_item: impl FnMut(&mut StyledWriter<W>, T) -> io::Result<()>,
+    ) -> io::Result<()>;
 }
 
-impl<W, T, I> WriteJoined<W, T> for (&mut W, I, &str)
+impl<W, T, S, I> WriteJoined<W, T> for (S, I, &str)
 where
+    S: AsMut<StyledWriter<W>>,
     W: Write,
     I: Iterator<Item = T>,
 {
     fn write_joined(
-        self,
-        mut write_item: impl FnMut(&mut W, T) -> io::Result<()>,
+        &mut self,
+        mut write_item: impl FnMut(&mut StyledWriter<W>, T) -> io::Result<()>,
     ) -> io::Result<()> {
-        let (writer, mut iterator, delimiter) = self;
+        let (writer, iterator, delimiter) = self;
         if let Some(item) = iterator.next() {
-            write_item(writer, item)?;
+            write_item(writer.as_mut(), item)?;
             for item in iterator {
-                writer.write_all(delimiter.as_bytes())?;
-                write_item(writer, item)?;
+                writer.as_mut().write(delimiter)?;
+                write_item(writer.as_mut(), item)?;
             }
         }
         Ok(())
