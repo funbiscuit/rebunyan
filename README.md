@@ -5,8 +5,9 @@ Not all features are implemented, main goal is to achieve better performance and
 
 # Compare
 
-You can compare this binary to other version (another rust port and original node-bunyan)
-by running `./compare.sh`. You will need to install node.js first and install other binaries:
+You can compare this binary to other version (another [rust port](https://github.com/dekobon/bunyan-view)
+and original [node-bunyan](https://github.com/trentm/node-bunyan)) by running `./compare.sh`.
+You will need to install node.js first and install other binaries:
 
 ```shell
 # benchmark tool
