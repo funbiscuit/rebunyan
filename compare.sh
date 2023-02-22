@@ -11,10 +11,12 @@ NODE_BUNYAN_BIN=$(npm config get prefix)/bin/bunyan
 cargo build --release --bin rebunyan
 log_file=target/bench.log
 
-tests=(minimal details details)
+#tests=(minimal details details)
+tests=(details)
 # use different number of lines so test takes ~equal time to finish
-log_scales=(16 15 15)
+log_scales=(12 15 15)
 cli_args=("--no-color" "--no-color" "--color")
+cli_args=("--condition \"this.hostname == 'localhost'\"" "--no-color" "--color")
 descriptions=("no color" "no color" "colored")
 compare_file="COMPARE.md"
 

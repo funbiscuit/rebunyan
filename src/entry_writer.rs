@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 use std::io;
 use std::io::Write;
 
+use rhai::{Engine, Scope};
 use time::format_description::FormatItem;
 
 use crate::log_entry::LogEntry;
@@ -15,6 +16,7 @@ const MAX_EXTRAS_LEN: usize = 50;
 
 #[derive(Debug)]
 pub struct EntryWriter {
+    engine: Engine,
     time_formatter: Vec<FormatItem<'static>>,
 }
 
@@ -22,13 +24,29 @@ impl EntryWriter {
     pub fn write_formatted(
         &self,
         writer: &mut StyledWriter<impl Write>,
-        entry: LogEntry,
+        mut entry: LogEntry,
     ) -> io::Result<()> {
         let hostname = if entry.hostname.is_empty() {
             "<no-hostname>"
         } else {
             entry.hostname.as_ref()
         };
+
+        {
+            let mut scope = Scope::new();
+            // scope.push("x", entry.hostname.to_string());
+            scope.push("this", &mut entry);
+
+            let s: bool = self
+                .engine
+                .eval_expression_with_scope::<bool>(&mut scope, r#"this.hostname == "localhost""#)
+                .unwrap();
+
+            if !s {
+                return Ok(());
+            }
+        }
+
         // not using write!(..) since it's a bit slower and makes harder to colorize output
         // without extra cost
         writer.write("[")?;
@@ -57,8 +75,12 @@ impl EntryWriter {
             [offset_hour sign:mandatory]:[offset_minute]",
         )
         .unwrap();
+        let engine = Engine::new();
 
-        Self { time_formatter }
+        Self {
+            engine,
+            time_formatter,
+        }
     }
 
     fn format_level(level: LogLevel) -> (String, Style) {

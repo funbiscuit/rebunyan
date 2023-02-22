@@ -21,6 +21,9 @@ struct Cli {
     #[arg(long = "color", conflicts_with = "no_color")]
     color: bool,
 
+    #[arg(long = "condition")]
+    condition: Option<String>,
+
     /// Force no coloring
     #[arg(long = "no-color", conflicts_with = "color")]
     no_color: bool,
