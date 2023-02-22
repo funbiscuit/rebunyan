@@ -1,6 +1,8 @@
 name: Build
 on:
   push:
+    tags-ignore:
+      - v*
   pull_request:
     branches: [ master ]
   release:
@@ -84,6 +86,8 @@ jobs:
           path: ${{github.workspace}}/target/release/rebunyan.exe
 
   add-release-assets:
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     if: github.event_name == 'release'
     needs: [ build-win, build-linux, build-macos ]
