@@ -5,6 +5,7 @@ use supports_color::Stream;
 
 use crate::entry_writer::EntryWriter;
 use crate::log_entry::LogEntry;
+use crate::log_level::LogLevel;
 use crate::styled_writer::StyledWriter;
 
 mod entry_writer;
@@ -18,8 +19,13 @@ mod styled_writer;
 struct Cli {
     /// Colorize output.
     /// If not set, will try to detect whether terminal supports coloring
-    #[arg(long = "color", conflicts_with = "no_color")]
+    #[arg(long, conflicts_with = "no_color")]
     color: bool,
+
+    /// Only show messages at or above the specified level.
+    /// Supported values: trace, debug, info, warn, error, fatal
+    #[arg(short, long, default_value = "trace")]
+    level: LogLevel,
 
     /// Force no coloring
     #[arg(long = "no-color", conflicts_with = "color")]
@@ -41,7 +47,9 @@ fn main() {
         let line = line.unwrap();
 
         if let Ok(entry) = serde_json::from_str::<LogEntry>(&line) {
-            formatter.write_formatted(&mut writer, entry).unwrap();
+            if entry.level >= cli.level {
+                formatter.write_formatted(&mut writer, entry).unwrap();
+            }
         } else {
             writer.write(&line).unwrap();
         }
