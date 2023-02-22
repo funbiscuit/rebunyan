@@ -59,7 +59,7 @@ impl FromStr for LogLevel {
             "warn" => Ok(LogLevel::Warn),
             "error" => Ok(LogLevel::Error),
             "fatal" => Ok(LogLevel::Fatal),
-            _ => Err(format!("Invalid value '{}' for log level", s)),
+            _ => Err(format!("Invalid value '{s}' for log level")),
         }
     }
 }
