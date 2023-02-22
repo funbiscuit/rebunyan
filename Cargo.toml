@@ -1,6 +1,15 @@
 [package]
 name = "rebunyan"
 version = "0.1.0"
+authors = ["Sviatoslav Kokurin <kokurinsv@gmail.com>"]
+description = """
+Fast tool to view json logs in bunyan format
+"""
+repository = "https://github.com/funbiscuit/rebunyan"
+readme = "README.md"
+keywords = ["terminal", "log", "bunyan"]
+license = "MIT OR Apache-2.0"
+categories = ["command-line-utilities"]
 edition = "2021"
 
 [profile.release]
